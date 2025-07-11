@@ -1,20 +1,9 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { 
-  Search, 
-  LayoutDashboard, 
-  FolderOpen, 
-  BarChart3, 
-  CheckSquare, 
-  FileType, 
-  Settings, 
-  User, 
-  BookOpen,
-  ChevronDown,
-  ChevronRight,
-  X
-} from 'lucide-react';
+import { Search, ChevronDown, ChevronRight, X } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useNavigationItems } from './RoleBasedNavigation';
+import { usePermissions } from '../hooks/usePermissions';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -27,66 +16,33 @@ export default function Sidebar({ isOpen, onToggle }: SidebarProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
+  const navigationItems = useNavigationItems();
+  const permissions = usePermissions();
 
-  const menuItems = [
-    { 
-      icon: LayoutDashboard, 
-      label: 'Dashboard', 
-      path: '/',
-      active: location.pathname === '/'
-    },
-    { 
-      icon: FolderOpen, 
-      label: 'Repository', 
-      path: '/repository',
-      expandable: true,
-      expanded: repositoryExpanded,
-      active: location.pathname === '/repository',
-      onToggle: () => setRepositoryExpanded(!repositoryExpanded),
-      submenu: [
-        { label: 'Folders', path: '/folders', active: location.pathname === '/folders' },
-        { label: 'All documents', path: '/all-documents', active: location.pathname === '/all-documents' },
+  // Create menu items with role-based access
+  const menuItems = navigationItems.map(item => ({
+    ...item,
+    active: location.pathname === item.path,
+    expandable: item.path === '/repository' || item.path === '/settings',
+    expanded: item.path === '/repository' ? repositoryExpanded : settingsExpanded,
+    onToggle: item.path === '/repository' 
+      ? () => setRepositoryExpanded(!repositoryExpanded)
+      : item.path === '/settings'
+      ? () => setSettingsExpanded(!settingsExpanded)
+      : undefined,
+    submenu: item.path === '/repository' ? [
+      { label: 'Folders', path: '/folders', active: location.pathname === '/folders' },
+      { label: 'All documents', path: '/all-documents', active: location.pathname === '/all-documents' },
+      ...(permissions.hasPermission('templates', 'create') ? [
         { label: 'Template drafts', path: '/template-drafts', active: location.pathname === '/template-drafts' }
-      ]
-    },
-    { 
-      icon: BarChart3, 
-      label: 'Insights', 
-      path: '/insights',
-      active: location.pathname === '/insights'
-    },
-    { 
-      icon: CheckSquare, 
-      label: 'Tasks', 
-      path: '/tasks',
-      active: location.pathname === '/tasks'
-    },
-    { 
-      icon: FileType, 
-      label: 'Templates', 
-      path: '/templates',
-      active: location.pathname === '/templates'
-    },
-    { 
-      icon: Settings, 
-      label: 'Settings',
-      path: '/settings',
-      expandable: true,
-      expanded: settingsExpanded,
-      active: location.pathname === '/settings',
-      onToggle: () => setSettingsExpanded(!settingsExpanded),
-      submenu: [
-        { label: 'Users & teams', active: false },
-        { label: 'Account', active: false }
-      ]
-    },
-    { 
-      icon: BookOpen, 
-      label: 'Knowledge hub', 
-      path: '/knowledge',
-      active: location.pathname === '/knowledge'
-    }
-  ];
+      ] : [])
+    ] : item.path === '/settings' ? [
+      ...(permissions.hasPermission('users', 'read') ? [
+        { label: 'Users & teams', path: '/user-management', active: location.pathname === '/user-management' }
+      ] : []),
+      { label: 'Account', path: '/account', active: location.pathname === '/account' }
+    ] : undefined
+  }));
 
   const handleNavigation = (item: any) => {
     if (item.expandable) {
@@ -105,13 +61,28 @@ export default function Sidebar({ isOpen, onToggle }: SidebarProps) {
       onToggle();
     }
   };
+
+  const getRoleDisplayInfo = () => {
+    const roleColors = {
+      admin: 'bg-red-100 text-red-800',
+      team: 'bg-blue-100 text-blue-800',
+      client: 'bg-green-100 text-green-800'
+    };
+    return { color: roleColors[user?.role as keyof typeof roleColors] || 'bg-gray-100 text-gray-800' };
+  };
+
   return (
     <>
       {/* Sidebar */}
       <div className={`fixed left-0 top-0 h-full w-64 bg-white border-r border-gray-200 transform transition-transform duration-300 ease-in-out z-50 ${isOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 lg:static lg:z-0 flex flex-col`}>
           {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-            <h1 className="text-xl font-bold text-gray-900">Pocketlaw</h1>
+            <div>
+              <h1 className="text-xl font-bold text-gray-900">Pocketlaw</h1>
+              <span className={`inline-block px-2 py-1 text-xs font-medium rounded-full mt-1 ${getRoleDisplayInfo().color}`}>
+                {user?.role?.toUpperCase()}
+              </span>
+            </div>
             <button 
               onClick={onToggle}
               className="lg:hidden p-1 rounded-md hover:bg-gray-100 transition-colors"
@@ -181,7 +152,10 @@ export default function Sidebar({ isOpen, onToggle }: SidebarProps) {
               </div>
               <div className="flex-1">
                 <p className="text-sm font-medium text-gray-900">{user?.name}</p>
-                <p className="text-xs text-gray-500">{user?.role}</p>
+                <p className="text-xs text-gray-500">{user?.department || 'No Department'}</p>
+              </div>
+              <div className={`px-2 py-1 text-xs font-medium rounded-full ${getRoleDisplayInfo().color}`}>
+                {user?.role?.charAt(0).toUpperCase() + user?.role?.slice(1)}
               </div>
             </div>
           </div>

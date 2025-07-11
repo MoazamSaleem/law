@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase';
 import { v4 as uuidv4 } from 'uuid';
+import { n8nService } from './n8nService';
 
 export interface DocumentUpload {
   file: File;
@@ -79,7 +80,26 @@ class DocumentService {
 
       if (error) throw error;
 
-      return this.mapToDocumentMetadata(data);
+      // Get user profile for N8N webhook
+      const { data: userProfile } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', user.user.id)
+        .single();
+
+      const document = this.mapToDocumentMetadata(data);
+
+      // Send N8N webhook for document upload
+      if (userProfile) {
+        await n8nService.documentUploaded(userProfile, document);
+        
+        // Special handling for proposals
+        if (file.name.toLowerCase().includes('proposal') || allTags.includes('proposal')) {
+          await n8nService.proposalUploaded(userProfile, document);
+        }
+      }
+
+      return document;
     } catch (error) {
       console.error('Error uploading document:', error);
       throw error;
@@ -166,6 +186,10 @@ class DocumentService {
 
   async updateDocument(id: string, updates: Partial<DocumentMetadata>): Promise<DocumentMetadata> {
     try {
+      // Get current document for comparison
+      const currentDoc = await this.getDocument(id);
+      const oldStatus = currentDoc?.status;
+
       const { data, error } = await supabase
         .from('documents')
         .update({
@@ -182,7 +206,26 @@ class DocumentService {
         .single();
 
       if (error) throw error;
-      return this.mapToDocumentMetadata(data);
+
+      const updatedDocument = this.mapToDocumentMetadata(data);
+
+      // Send N8N webhook for status change
+      if (oldStatus && updates.status && oldStatus !== updates.status) {
+        const { data: user } = await supabase.auth.getUser();
+        if (user.user) {
+          const { data: userProfile } = await supabase
+            .from('users')
+            .select('*')
+            .eq('id', user.user.id)
+            .single();
+
+          if (userProfile) {
+            await n8nService.documentStatusChanged(userProfile, updatedDocument, oldStatus, updates.status);
+          }
+        }
+      }
+
+      return updatedDocument;
     } catch (error) {
       console.error('Error updating document:', error);
       throw error;

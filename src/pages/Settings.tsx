@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
 import { User, Bell, Shield, CreditCard, Users, Building, Save } from 'lucide-react';
+import { usePermissions } from '../hooks/usePermissions';
+import PermissionGate from '../components/PermissionGate';
 
 export default function Settings() {
   const [activeTab, setActiveTab] = useState('profile');
+  const permissions = usePermissions();
 
-  const tabs = [
+  const allTabs = [
     { id: 'profile', label: 'Profile', icon: User },
     { id: 'notifications', label: 'Notifications', icon: Bell },
     { id: 'security', label: 'Security', icon: Shield },
@@ -13,6 +16,16 @@ export default function Settings() {
     { id: 'organization', label: 'Organization', icon: Building }
   ];
 
+  // Filter tabs based on permissions
+  const tabs = allTabs.filter(tab => {
+    if (tab.id === 'billing' || tab.id === 'organization') {
+      return permissions.hasPermission('billing', 'read');
+    }
+    if (tab.id === 'team') {
+      return permissions.hasPermission('users', 'read');
+    }
+    return true;
+  });
   return (
     <div>
       {/* Header */}
@@ -193,12 +206,169 @@ export default function Settings() {
                       </button>
                     </div>
                   </div>
+
+                  <PermissionGate role="admin">
+                    <div>
+                      <h4 className="text-base font-medium text-gray-900 mb-4">Admin Security Settings</h4>
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">Session Timeout</p>
+                            <p className="text-sm text-gray-500">Automatically log out inactive users</p>
+                          </div>
+                          <select className="px-3 py-1 border border-gray-300 rounded text-sm">
+                            <option>30 minutes</option>
+                            <option>1 hour</option>
+                            <option>4 hours</option>
+                            <option>8 hours</option>
+                          </select>
+                        </div>
+                        <div className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">IP Restrictions</p>
+                            <p className="text-sm text-gray-500">Limit access to specific IP addresses</p>
+                          </div>
+                          <button className="px-3 py-1 bg-gray-100 text-gray-700 rounded text-sm hover:bg-gray-200">
+                            Configure
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </PermissionGate>
                 </div>
               </div>
             )}
 
+            {activeTab === 'billing' && (
+              <PermissionGate resource="billing" action="read">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-6">Billing & Subscription</h3>
+                  <div className="space-y-6">
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <h4 className="font-medium text-blue-900">Current Plan: Professional</h4>
+                      <p className="text-sm text-blue-700 mt-1">$99/month • Next billing: March 15, 2024</p>
+                    </div>
+                    
+                    <div>
+                      <h4 className="text-base font-medium text-gray-900 mb-4">Usage This Month</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="bg-gray-50 p-4 rounded-lg">
+                          <p className="text-sm text-gray-600">Documents</p>
+                          <p className="text-2xl font-bold text-gray-900">1,247</p>
+                          <p className="text-xs text-gray-500">of 5,000 limit</p>
+                        </div>
+                        <div className="bg-gray-50 p-4 rounded-lg">
+                          <p className="text-sm text-gray-600">Storage</p>
+                          <p className="text-2xl font-bold text-gray-900">12.4 GB</p>
+                          <p className="text-xs text-gray-500">of 100 GB limit</p>
+                        </div>
+                        <div className="bg-gray-50 p-4 rounded-lg">
+                          <p className="text-sm text-gray-600">Users</p>
+                          <p className="text-2xl font-bold text-gray-900">8</p>
+                          <p className="text-xs text-gray-500">of 25 limit</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </PermissionGate>
+            )}
+
+            {activeTab === 'team' && (
+              <PermissionGate resource="users" action="read">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-6">Team Settings</h3>
+                  <div className="space-y-6">
+                    <div>
+                      <h4 className="text-base font-medium text-gray-900 mb-4">Default Permissions</h4>
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">New Team Members</p>
+                            <p className="text-sm text-gray-500">Default role for new team members</p>
+                          </div>
+                          <select className="px-3 py-1 border border-gray-300 rounded text-sm">
+                            <option>Team Member</option>
+                            <option>Client</option>
+                          </select>
+                        </div>
+                        <div className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">Document Sharing</p>
+                            <p className="text-sm text-gray-500">Allow team members to share documents externally</p>
+                          </div>
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" className="sr-only peer" defaultChecked />
+                            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </PermissionGate>
+            )}
+
+            {activeTab === 'organization' && (
+              <PermissionGate resource="billing" action="read">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-6">Organization Settings</h3>
+                  <div className="space-y-6">
+                    <div>
+                      <h4 className="text-base font-medium text-gray-900 mb-4">Company Information</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Company Name</label>
+                          <input
+                            type="text"
+                            defaultValue="Acme Legal Corp"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Industry</label>
+                          <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                            <option>Legal Services</option>
+                            <option>Technology</option>
+                            <option>Healthcare</option>
+                            <option>Finance</option>
+                            <option>Other</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <h4 className="text-base font-medium text-gray-900 mb-4">Compliance Settings</h4>
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">GDPR Compliance</p>
+                            <p className="text-sm text-gray-500">Enable GDPR compliance features</p>
+                          </div>
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" className="sr-only peer" defaultChecked />
+                            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                          </label>
+                        </div>
+                        <div className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">Audit Logging</p>
+                            <p className="text-sm text-gray-500">Track all user activities</p>
+                          </div>
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" className="sr-only peer" defaultChecked />
+                            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </PermissionGate>
+            )}
             {/* Add other tab contents similarly */}
-            {activeTab !== 'profile' && activeTab !== 'notifications' && activeTab !== 'security' && (
+            {!['profile', 'notifications', 'security', 'billing', 'team', 'organization'].includes(activeTab) && (
               <div className="text-center py-12">
                 <p className="text-gray-500">Settings for {tabs.find(t => t.id === activeTab)?.label} coming soon...</p>
               </div>

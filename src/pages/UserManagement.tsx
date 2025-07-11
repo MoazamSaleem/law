@@ -1,8 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Plus, Edit, Trash2, Shield, User, Mail, Phone, Calendar, Filter, MoreHorizontal } from 'lucide-react';
 import { userService, UserProfile } from '../services/userService';
+import { usePermissions } from '../hooks/usePermissions';
+import { n8nService } from '../services/n8nService';
+import { useAuth } from '../contexts/AuthContext';
+import PermissionGate from '../components/PermissionGate';
 
 export default function UserManagement() {
+  const { user: currentUser } = useAuth();
+  const permissions = usePermissions();
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -11,6 +17,12 @@ export default function UserManagement() {
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [inviteData, setInviteData] = useState({
+    email: '',
+    role: 'team' as 'admin' | 'team' | 'client',
+    department: '',
+    message: ''
+  });
 
   useEffect(() => {
     loadUsers();
@@ -43,8 +55,16 @@ export default function UserManagement() {
 
   const handleRoleChange = async (userId: string, newRole: 'admin' | 'user' | 'viewer') => {
     try {
+      const targetUser = users.find(u => u.id === userId);
+      const oldRole = targetUser?.role;
+      
       await userService.updateUserRole(userId, newRole);
       await loadUsers();
+
+      // Send N8N webhook
+      if (currentUser && targetUser && oldRole) {
+        await n8nService.userRoleChanged(currentUser, targetUser, oldRole, newRole);
+      }
     } catch (error) {
       console.error('Error updating user role:', error);
     }
@@ -63,11 +83,26 @@ export default function UserManagement() {
     }
   };
 
+  const handleInviteUser = async () => {
+    try {
+      // Here you would typically send an invitation email
+      // For now, we'll just send the N8N webhook
+      if (currentUser) {
+        await n8nService.userInvited(currentUser, inviteData.email, inviteData.role);
+      }
+      
+      setShowInviteModal(false);
+      setInviteData({ email: '', role: 'team', department: '', message: '' });
+    } catch (error) {
+      console.error('Error inviting user:', error);
+    }
+  };
+
   const getRoleColor = (role: string) => {
     switch (role) {
       case 'admin': return 'bg-red-100 text-red-800';
-      case 'user': return 'bg-blue-100 text-blue-800';
-      case 'viewer': return 'bg-gray-100 text-gray-800';
+      case 'team': return 'bg-blue-100 text-blue-800';
+      case 'client': return 'bg-green-100 text-green-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
@@ -92,19 +127,21 @@ export default function UserManagement() {
   return (
     <div>
       {/* Header */}
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">User Management</h1>
-          <p className="text-gray-600">Manage users, roles, and permissions</p>
+      <PermissionGate resource="users" action="manage_roles">
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">User Management</h1>
+            <p className="text-gray-600">Manage users, roles, and permissions</p>
+          </div>
+          <button
+            onClick={() => setShowInviteModal(true)}
+            className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            <Plus size={16} />
+            <span>Invite User</span>
+          </button>
         </div>
-        <button
-          onClick={() => setShowInviteModal(true)}
-          className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-        >
-          <Plus size={16} />
-          <span>Invite User</span>
-        </button>
-      </div>
+      </PermissionGate>
 
       {/* Filters */}
       <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
@@ -128,8 +165,8 @@ export default function UserManagement() {
             >
               <option value="all">All Roles</option>
               <option value="admin">Admin</option>
-              <option value="user">User</option>
-              <option value="viewer">Viewer</option>
+              <option value="team">Team</option>
+              <option value="client">Client</option>
             </select>
 
             <select
@@ -283,6 +320,8 @@ export default function UserManagement() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">Email Address</label>
                 <input
                   type="email"
+                  value={inviteData.email}
+                  onChange={(e) => setInviteData({...inviteData, email: e.target.value})}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="user@example.com"
                 />
@@ -290,10 +329,14 @@ export default function UserManagement() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Role</label>
-                <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                  <option value="user">User</option>
+                <select 
+                  value={inviteData.role}
+                  onChange={(e) => setInviteData({...inviteData, role: e.target.value as any})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="team">Team Member</option>
                   <option value="admin">Admin</option>
-                  <option value="viewer">Viewer</option>
+                  <option value="client">Client</option>
                 </select>
               </div>
 
@@ -301,6 +344,8 @@ export default function UserManagement() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">Department</label>
                 <input
                   type="text"
+                  value={inviteData.department}
+                  onChange={(e) => setInviteData({...inviteData, department: e.target.value})}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="Legal, HR, Finance, etc."
                 />
@@ -310,6 +355,8 @@ export default function UserManagement() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">Personal Message (Optional)</label>
                 <textarea
                   rows={3}
+                  value={inviteData.message}
+                  onChange={(e) => setInviteData({...inviteData, message: e.target.value})}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="Welcome to our team!"
                 />
@@ -318,7 +365,7 @@ export default function UserManagement() {
 
             <div className="flex items-center space-x-3 mt-6">
               <button
-                onClick={() => setShowInviteModal(false)}
+                onClick={handleInviteUser}
                 className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >
                 Send Invitation

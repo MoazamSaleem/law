@@ -17,6 +17,8 @@ import Insights from './pages/Insights';
 import Tasks from './pages/Tasks';
 import Templates from './pages/Templates';
 import Settings from './pages/Settings';
+import UserManagement from './pages/UserManagement';
+import Account from './pages/Account';
 
 function App() {
   return (
@@ -42,6 +44,8 @@ function App() {
             <Route path="tasks" element={<Tasks />} />
             <Route path="templates" element={<Templates />} />
             <Route path="settings" element={<Settings />} />
+            <Route path="user-management" element={<UserManagement />} />
+            <Route path="account" element={<Account />} />
           </Route>
         </Routes>
       </Router>
