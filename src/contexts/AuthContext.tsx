@@ -1,34 +1,38 @@
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
-import { User, AuthState } from '../types';
-import { authService } from '../services/authService';
+import { AuthState } from '../types';
+import { supabase } from '../lib/supabase';
+import { userService, UserProfile } from '../services/userService';
 
-interface AuthContextType extends AuthState {
-  login: (email: string, password: string) => Promise<void>;
+interface AuthContextType {
+  user: UserProfile | null;
+  isAuthenticated: boolean;
+  isLoading: boolean;
+  signIn: (email: string, password: string) => Promise<void>;
+  signUp: (email: string, password: string, userData: any) => Promise<void>;
   logout: () => void;
-  register: (userData: Partial<User> & { password: string }) => Promise<void>;
-  updateProfile: (userData: Partial<User>) => Promise<void>;
+  updateProfile: (userData: any) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 type AuthAction = 
-  | { type: 'LOGIN_START' }
-  | { type: 'LOGIN_SUCCESS'; payload: User }
-  | { type: 'LOGIN_FAILURE' }
+  | { type: 'AUTH_START' }
+  | { type: 'AUTH_SUCCESS'; payload: UserProfile }
+  | { type: 'AUTH_FAILURE' }
   | { type: 'LOGOUT' }
-  | { type: 'UPDATE_USER'; payload: User };
+  | { type: 'UPDATE_USER'; payload: UserProfile };
 
-const authReducer = (state: AuthState, action: AuthAction): AuthState => {
+const authReducer = (state: any, action: AuthAction): any => {
   switch (action.type) {
-    case 'LOGIN_START':
+    case 'AUTH_START':
       return { ...state, isLoading: true };
-    case 'LOGIN_SUCCESS':
+    case 'AUTH_SUCCESS':
       return { 
         user: action.payload, 
         isAuthenticated: true, 
         isLoading: false 
       };
-    case 'LOGIN_FAILURE':
+    case 'AUTH_FAILURE':
       return { 
         user: null, 
         isAuthenticated: false, 
@@ -58,52 +62,97 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   });
 
   useEffect(() => {
-    const initAuth = async () => {
+    const initializeAuth = async () => {
       try {
-        const user = await authService.getCurrentUser();
-        if (user) {
-          dispatch({ type: 'LOGIN_SUCCESS', payload: user });
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (session?.user) {
+          const user = await userService.getCurrentUser();
+          if (user) {
+            dispatch({ type: 'AUTH_SUCCESS', payload: user });
+          } else {
+            dispatch({ type: 'AUTH_FAILURE' });
+          }
         } else {
-          dispatch({ type: 'LOGIN_FAILURE' });
+          dispatch({ type: 'AUTH_FAILURE' });
         }
       } catch (error) {
-        dispatch({ type: 'LOGIN_FAILURE' });
+        console.error('Auth initialization error:', error);
+        dispatch({ type: 'AUTH_FAILURE' });
       }
     };
 
-    initAuth();
+    initializeAuth();
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session?.user) {
+        const user = await userService.getCurrentUser();
+        if (user) {
+          dispatch({ type: 'AUTH_SUCCESS', payload: user });
+        } else {
+          dispatch({ type: 'AUTH_FAILURE' });
+        }
+      } else if (event === 'SIGNED_OUT') {
+        dispatch({ type: 'LOGOUT' });
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
-  const login = async (email: string, password: string) => {
-    dispatch({ type: 'LOGIN_START' });
+  const signIn = async (email: string, password: string) => {
+    dispatch({ type: 'AUTH_START' });
     try {
-      const user = await authService.login(email, password);
-      dispatch({ type: 'LOGIN_SUCCESS', payload: user });
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) throw error;
+
+      const user = await userService.getCurrentUser();
+      if (user) {
+        dispatch({ type: 'AUTH_SUCCESS', payload: user });
+      } else {
+        throw new Error('Failed to get user profile');
+      }
     } catch (error) {
-      dispatch({ type: 'LOGIN_FAILURE' });
+      dispatch({ type: 'AUTH_FAILURE' });
+      throw error;
+    }
+  };
+
+  const signUp = async (email: string, password: string, userData: any) => {
+    dispatch({ type: 'AUTH_START' });
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: userData
+        }
+      });
+
+      if (error) throw error;
+
+      // User will be signed in automatically after email confirmation
+    } catch (error) {
+      dispatch({ type: 'AUTH_FAILURE' });
       throw error;
     }
   };
 
   const logout = () => {
-    authService.logout();
+    supabase.auth.signOut();
     dispatch({ type: 'LOGOUT' });
   };
 
-  const register = async (userData: Partial<User> & { password: string }) => {
-    dispatch({ type: 'LOGIN_START' });
+  const updateProfile = async (userData: any) => {
     try {
-      const user = await authService.register(userData);
-      dispatch({ type: 'LOGIN_SUCCESS', payload: user });
-    } catch (error) {
-      dispatch({ type: 'LOGIN_FAILURE' });
-      throw error;
-    }
-  };
-
-  const updateProfile = async (userData: Partial<User>) => {
-    try {
-      const updatedUser = await authService.updateProfile(userData);
+      const updatedUser = await userService.updateProfile(userData);
       dispatch({ type: 'UPDATE_USER', payload: updatedUser });
     } catch (error) {
       throw error;
@@ -113,9 +162,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   return (
     <AuthContext.Provider value={{
       ...state,
-      login,
+      signIn,
+      signUp,
       logout,
-      register,
       updateProfile
     }}>
       {children}

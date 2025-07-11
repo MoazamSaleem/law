@@ -12,14 +12,14 @@ interface LoginFormData {
 export default function LoginForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
-  const { login, isLoading } = useAuth();
+  const { signIn, isLoading } = useAuth();
   
   const { register, handleSubmit, formState: { errors } } = useForm<LoginFormData>();
 
   const onSubmit = async (data: LoginFormData) => {
     try {
       setError('');
-      await login(data.email, data.password);
+      await signIn(data.email, data.password);
     } catch (err) {
       setError('Invalid email or password');
     }
